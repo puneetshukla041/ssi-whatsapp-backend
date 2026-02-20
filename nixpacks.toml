@@ -8,3 +8,6 @@ aptPkgs = [
     "libgtk-3-0",
     "libgbm-dev"
 ]
+
+[phases.build]
+cmds = ["npm install"]
