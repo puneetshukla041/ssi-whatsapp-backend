@@ -1,13 +1,8 @@
-[phases.setup]
-aptPkgs = [
-    "chromium",
-    "libnss3",
-    "libxss1",
-    "libasound2",
-    "libatk-bridge2.0-0",
-    "libgtk-3-0",
-    "libgbm-dev"
-]
+providers = ["node"]
 
-[phases.build]
-cmds = ["npm install"]
+[phases.setup]
+nixPkgs = ["nodejs", "npm", "chromium"]
+
+[variables]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "chromium"
