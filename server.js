@@ -37,28 +37,40 @@ const client = new Client({
             '--disable-dev-shm-usage',
             '--no-zygote',
             '--disable-gpu',
-            '--disable-features=site-per-process' // From your working old code
+            '--disable-features=site-per-process' 
         ],
     }
 });
 
 let isClientReady = false;
+let latestQR = null; // Store the QR code for the frontend
 
 // 2. EVENTS
 client.on('qr', (qr) => {
     console.clear();
     console.log('--- SCAN THE QR CODE BELOW ---');
+    latestQR = qr; // Save for the API
     qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
     console.log('✅ SUCCESS: WhatsApp is ONLINE');
     isClientReady = true;
+    latestQR = null; // Clear it once connected
 });
 
 client.on('auth_failure', (msg) => {
     console.error('❌ Authentication failure:', msg);
     isClientReady = false;
+});
+
+client.on('disconnected', (reason) => {
+    console.log('❌ Client was logged out', reason);
+    isClientReady = false;
+    // Destroy the client so it can be re-initialized
+    client.destroy().then(() => {
+        client.initialize();
+    });
 });
 
 // 3. START ENGINE
@@ -70,10 +82,32 @@ client.initialize().catch(err => {
 });
 
 // 4. API ROUTES
+
+// Check overall status
 app.get('/api/status', (req, res) => {
     res.json({ success: true, ready: isClientReady });
 });
 
+// Fetch the QR code for the frontend
+app.get('/api/get-qr', (req, res) => {
+    if (isClientReady) {
+        return res.json({ success: true, ready: true, qr: null });
+    }
+    res.json({ success: true, ready: false, qr: latestQR });
+});
+
+// Handle Logout
+app.post('/api/logout', async (req, res) => {
+    try {
+        await client.logout();
+        isClientReady = false;
+        res.json({ success: true, message: "Logged out successfully" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Send Message
 app.post('/api/send', async (req, res) => {
     if (!isClientReady) return res.status(503).json({ error: 'WhatsApp not ready' });
     const { phone, message } = req.body;
@@ -94,7 +128,6 @@ app.get('/', (req, res) => {
             <h2 style="color: ${isClientReady ? 'green' : 'red'}">
                 Status: ${isClientReady ? 'ONLINE' : 'OFFLINE / LOADING'}
             </h2>
-            <p>Check terminal for the QR code.</p>
         </div>
     `);
 });
