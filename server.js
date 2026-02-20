@@ -30,6 +30,9 @@ const client = new Client({
     },
     puppeteer: {
         headless: true,
+        // --- CRITICAL RAILWAY FIX ---
+        // Uses Railway's installed Chromium in production, defaults to local browser otherwise
+        executablePath: process.env.NODE_ENV === 'production' ? '/usr/bin/chromium' : undefined,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
