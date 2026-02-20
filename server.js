@@ -3,19 +3,18 @@ const cors = require('cors');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
-app.use(cors());
+
+// --- BULLETPROOF CORS FIX ---
+// This allows ANY frontend to connect. 
+app.use(cors()); 
 app.use(express.json());
 
 // 1. CONFIGURATION
 const PORT = process.env.PORT || 3001;
 
-/** * ONDRIVE FIX: 
- * If running locally on Windows, use the TEMP folder to avoid OneDrive locks.
- * If running on Railway (Linux), use the local folder.
- */
+// ONDRIVE FIX & RAILWAY FIX combined
 const sessionPath = process.env.TEMP 
     ? path.join(process.env.TEMP, 'ssi_whatsapp_auth') 
     : path.join(__dirname, '.wwebjs_auth');
@@ -43,20 +42,20 @@ const client = new Client({
 });
 
 let isClientReady = false;
-let latestQR = null; // Store the QR code for the frontend
+let latestQR = null;
 
 // 2. EVENTS
 client.on('qr', (qr) => {
     console.clear();
     console.log('--- SCAN THE QR CODE BELOW ---');
-    latestQR = qr; // Save for the API
+    latestQR = qr; 
     qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
     console.log('✅ SUCCESS: WhatsApp is ONLINE');
     isClientReady = true;
-    latestQR = null; // Clear it once connected
+    latestQR = null; 
 });
 
 client.on('auth_failure', (msg) => {
@@ -67,7 +66,6 @@ client.on('auth_failure', (msg) => {
 client.on('disconnected', (reason) => {
     console.log('❌ Client was logged out', reason);
     isClientReady = false;
-    // Destroy the client so it can be re-initialized
     client.destroy().then(() => {
         client.initialize();
     });
@@ -75,20 +73,19 @@ client.on('disconnected', (reason) => {
 
 // 3. START ENGINE
 console.log('🚀 Initializing WhatsApp engine...');
-console.log('📂 Session storage path:', sessionPath);
-
 client.initialize().catch(err => {
     console.error("Init Error:", err.message);
 });
 
 // 4. API ROUTES
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 
-// Check overall status
 app.get('/api/status', (req, res) => {
     res.json({ success: true, ready: isClientReady });
 });
 
-// Fetch the QR code for the frontend
 app.get('/api/get-qr', (req, res) => {
     if (isClientReady) {
         return res.json({ success: true, ready: true, qr: null });
@@ -96,18 +93,17 @@ app.get('/api/get-qr', (req, res) => {
     res.json({ success: true, ready: false, qr: latestQR });
 });
 
-// Handle Logout
 app.post('/api/logout', async (req, res) => {
     try {
         await client.logout();
         isClientReady = false;
+        latestQR = null; // Clear old QR just in case
         res.json({ success: true, message: "Logged out successfully" });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// Send Message
 app.post('/api/send', async (req, res) => {
     if (!isClientReady) return res.status(503).json({ error: 'WhatsApp not ready' });
     const { phone, message } = req.body;
@@ -132,5 +128,4 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Listen on 0.0.0.0 for Railway compatibility
 app.listen(PORT, '0.0.0.0', () => console.log(`📡 Server running on port ${PORT}`));
