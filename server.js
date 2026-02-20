@@ -7,14 +7,12 @@ const path = require('path');
 const app = express();
 
 // --- BULLETPROOF CORS FIX ---
-// Allows your Vercel frontend and Localhost to communicate with the API
 app.use(cors()); 
 app.use(express.json());
 
 // 1. CONFIGURATION
 const PORT = process.env.PORT || 3001;
 
-// Define session path (Railway uses root, local might use Temp)
 const sessionPath = process.env.TEMP 
     ? path.join(process.env.TEMP, 'ssi_whatsapp_auth') 
     : path.join(__dirname, '.wwebjs_auth');
@@ -31,7 +29,7 @@ const client = new Client({
     puppeteer: {
         headless: true,
         // --- NATIVE BROWSER FIX ---
-        // Uses the chromium installed via nixpacks.toml on Railway
+        // On Railway, this will be "chromium" from nixpacks.toml
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
             '--no-sandbox',
@@ -47,10 +45,10 @@ const client = new Client({
 let isClientReady = false;
 let latestQR = null;
 
-// 2. WHATSAPP EVENTS
+// 2. EVENTS
 client.on('qr', (qr) => {
     console.clear();
-    console.log('--- NEW QR CODE GENERATED ---');
+    console.log('--- SCAN THE QR CODE BELOW ---');
     latestQR = qr; 
     qrcode.generate(qr, { small: true });
 });
@@ -69,7 +67,6 @@ client.on('auth_failure', (msg) => {
 client.on('disconnected', (reason) => {
     console.log('❌ Client was logged out', reason);
     isClientReady = false;
-    // Attempt to restart the engine
     client.destroy().then(() => {
         client.initialize();
     });
@@ -82,18 +79,14 @@ client.initialize().catch(err => {
 });
 
 // 4. API ROUTES
-
-// Health check for Railway monitoring
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// Status check for Frontend UI
 app.get('/api/status', (req, res) => {
     res.json({ success: true, ready: isClientReady });
 });
 
-// QR Code delivery for Frontend scanning
 app.get('/api/get-qr', (req, res) => {
     if (isClientReady) {
         return res.json({ success: true, ready: true, qr: null });
@@ -101,7 +94,6 @@ app.get('/api/get-qr', (req, res) => {
     res.json({ success: true, ready: false, qr: latestQR });
 });
 
-// Disconnect route
 app.post('/api/logout', async (req, res) => {
     try {
         await client.logout();
@@ -113,13 +105,12 @@ app.post('/api/logout', async (req, res) => {
     }
 });
 
-// Main Send Route
 app.post('/api/send', async (req, res) => {
     if (!isClientReady) return res.status(503).json({ error: 'WhatsApp not ready' });
     const { phone, message } = req.body;
     try {
         let num = phone.toString().replace(/\D/g, '');
-        if (num.length === 10) num = '91' + num; // Default to India if no code
+        if (num.length === 10) num = '91' + num;
         await client.sendMessage(`${num}@c.us`, message);
         res.json({ success: true });
     } catch (e) {
@@ -127,15 +118,13 @@ app.post('/api/send', async (req, res) => {
     }
 });
 
-// Root Landing Page
 app.get('/', (req, res) => {
     res.send(`
         <div style="text-align:center; padding:50px; font-family: sans-serif;">
             <h1>SSI WhatsApp Server</h1>
-            <h2 style="color: ${isClientReady ? '#34C759' : '#FF3B30'}">
-                Status: ${isClientReady ? 'ONLINE' : 'OFFLINE / WAITING'}
+            <h2 style="color: ${isClientReady ? 'green' : 'red'}">
+                Status: ${isClientReady ? 'ONLINE' : 'OFFLINE / LOADING'}
             </h2>
-            <p>Engine path: ${process.env.PUPPETEER_EXECUTABLE_PATH || 'Local Default'}</p>
         </div>
     `);
 });
